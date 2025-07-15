@@ -22,7 +22,7 @@ hex = "0.4"
 
 [features]
 default = ["std"]
-std = []
+std = ["vendored"]
 vendored = ["botan-sys/vendored"]
 static = ["botan-sys/static"]
 pkg-config = ["botan-sys/pkg-config"]

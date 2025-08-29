@@ -15,7 +15,7 @@ edition = "2021"
 rust-version = "1.64"
 
 [features]
-default = []
+default = ["vendored"]
 vendored = ["botan-src"]
 static = []
 pkg-config = ["dep:pkg-config"]

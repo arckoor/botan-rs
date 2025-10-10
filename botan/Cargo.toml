@@ -22,7 +22,7 @@ wycheproof = { version = "0.6", default-features = false, features = ["aead", "c
 hex = "0.4"
 
 [features]
-default = ["std", "rand"]
+default = ["std", "rand", "vendored"]
 std = []
 vendored = ["botan-sys/vendored"]
 static = ["botan-sys/static"]

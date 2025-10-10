@@ -153,6 +153,11 @@ extern "C" {
     pub fn botan_privkey_rsa_get_n(n: botan_mp_t, rsa_key: botan_privkey_t) -> c_int;
     pub fn botan_privkey_rsa_get_e(e: botan_mp_t, rsa_key: botan_privkey_t) -> c_int;
     pub fn botan_pubkey_load_rsa(key: *mut botan_pubkey_t, n: botan_mp_t, e: botan_mp_t) -> c_int;
+    pub fn botan_pubkey_load_rsa_pkcs1(
+        key: *mut botan_pubkey_t,
+        bits: *const u8,
+        len: usize,
+    ) -> c_int;
     pub fn botan_pubkey_rsa_get_e(e: botan_mp_t, rsa_key: botan_pubkey_t) -> c_int;
     pub fn botan_pubkey_rsa_get_n(n: botan_mp_t, rsa_key: botan_pubkey_t) -> c_int;
     pub fn botan_privkey_load_dsa(

@@ -44,6 +44,20 @@ macro_rules! botan_init {
     }};
 }
 
+/// `botan_init_at!(func, before ; after)`
+///
+/// `;` specifies the point at which the `out_t*` pointer is inserted
+#[allow(unused)]
+macro_rules! botan_init_at {
+    ($fn:path, $($before:expr),* ; $($after:expr),*) => {{
+        let mut obj = std::ptr::null_mut();
+        let rc = unsafe {
+            $fn($($before,)* &mut obj $(, $after)*)
+        };
+        if rc == 0 { Ok(obj) } else { Err(Error::from_rc(rc)) }
+    }};
+}
+
 macro_rules! botan_impl_drop {
     ($typ:ty, $fn:path) => {
         impl Drop for $typ {
@@ -101,6 +115,7 @@ mod bcrypt;
 mod block;
 mod cipher;
 mod ec_group;
+mod ec_point;
 mod fpe;
 mod hash;
 mod kdf;
@@ -111,7 +126,6 @@ mod mp;
 mod otp;
 mod pbkdf;
 mod pk_ops;
-
 mod pubkey;
 mod rng;
 mod utils;
@@ -125,6 +139,7 @@ pub use bcrypt::*;
 pub use block::*;
 pub use cipher::*;
 pub use ec_group::*;
+pub use ec_point::*;
 pub use fpe::*;
 pub use hash::*;
 pub use kdf::*;

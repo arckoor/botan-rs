@@ -5,6 +5,7 @@
 mod block;
 mod cipher;
 mod ec_group;
+mod ec_point;
 mod errors;
 mod fpe;
 mod hash;
@@ -44,6 +45,7 @@ pub mod ffi_types {
 pub use block::*;
 pub use cipher::*;
 pub use ec_group::*;
+pub use ec_point::*;
 pub use errors::*;
 pub use fpe::*;
 pub use hash::*;

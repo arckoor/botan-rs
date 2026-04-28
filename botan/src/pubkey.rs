@@ -1,6 +1,9 @@
 use crate::utils::*;
 use botan_sys::*;
 
+#[cfg(botan_ffi_20260505)]
+use crate::{EcGroup, EcPoint, EcScalar};
+
 use crate::mp::MPI;
 use crate::pk_ops::*;
 use crate::rng::RandomNumberGenerator;
@@ -43,6 +46,22 @@ impl Privkey {
         )?;
 
         Ok(Privkey { obj })
+    }
+
+    /// Create a new EC private key
+    #[cfg(botan_ffi_20250506)]
+    pub fn create_ec(
+        alg: &str,
+        ec_group: &EcGroup,
+        rng: &mut RandomNumberGenerator,
+    ) -> Result<Privkey> {
+        let obj = botan_init!(
+            botan_ec_privkey_create,
+            make_cstr(alg)?.as_ptr(),
+            ec_group.handle(),
+            rng.handle()
+        )?;
+        Ok(Self { obj })
     }
 
     /// Create a new ElGamal private key with a random group
@@ -473,6 +492,24 @@ impl Privkey {
         Ok(r)
     }
 
+    /// Return the private value of this key
+    ///
+    /// Only valid for EC based keys
+    #[cfg(botan_ffi_20260505)]
+    pub fn get_private_value(&self) -> Result<EcScalar> {
+        let obj = botan_init_at!(botan_ec_privkey_get_private_key, self.obj;)?;
+        Ok(EcScalar::from_handle(obj))
+    }
+
+    /// Return the group associated with this key
+    ///
+    /// Only valid for EC based keys
+    #[cfg(botan_ffi_20260505)]
+    pub fn get_group(&self) -> Result<EcGroup> {
+        let obj = botan_init_at!(botan_ec_privkey_get_group, self.obj;)?;
+        Ok(EcGroup::from_handle(obj))
+    }
+
     /// Get the raw bytes associated with this key
     ///
     /// This is not defined for certain schemes which do not have an obvious
@@ -765,6 +802,15 @@ impl Pubkey {
         let r = MPI::new()?;
         botan_call!(botan_pubkey_get_field, r.handle(), self.obj, which.as_ptr())?;
         Ok(r)
+    }
+
+    /// Return the group associated with this key
+    ///
+    /// Only valid for EC based keys
+    #[cfg(botan_ffi_20260505)]
+    pub fn get_group(&self) -> Result<EcGroup> {
+        let obj = botan_init_at!(botan_ec_pubkey_get_group, self.obj; )?;
+        Ok(EcGroup::from_handle(obj))
     }
 
     /// Return the raw byte encoding of this key

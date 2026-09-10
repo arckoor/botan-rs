@@ -18,7 +18,7 @@ botan-sys = { version = "1.20260811.1", path = "../botan-sys" }
 rand_core = { version = "0.10", default-features = false, optional = true }
 
 [dev-dependencies]
-wycheproof = { version = "0.6", default-features = false, features = ["aead", "cipher", "dsa", "ecdh", "ecdsa", "eddsa", "hkdf", "keywrap", "mac", "primality", "rsa_enc", "rsa_sig", "xdh"] }
+wycheproof = { version = "0.7", default-features = false, features = ["aead", "cipher", "dsa", "ecdh", "ecdsa", "eddsa", "hkdf", "keywrap", "mac", "primality", "rsa_enc", "rsa_sig", "xdh"] }
 hex = "0.4"
 
 [features]

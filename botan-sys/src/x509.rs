@@ -25,6 +25,12 @@ pub type botan_x509_cert_builder_t = *mut botan_x509_cert_builder_struct;
 pub enum botan_x509_pkcs10_req_struct {}
 pub type botan_x509_pkcs10_req_t = *mut botan_x509_pkcs10_req_struct;
 
+pub enum botan_x509_ext_ip_addr_blocks_struct {}
+pub type botan_x509_ext_ip_addr_blocks_t = *mut botan_x509_ext_ip_addr_blocks_struct;
+
+pub enum botan_x509_ext_as_blocks_struct {}
+pub type botan_x509_ext_as_blocks_t = *mut botan_x509_ext_as_blocks_struct;
+
 #[repr(u32)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum X509KeyConstraints {
@@ -429,6 +435,55 @@ botan_ffi_functions! {
         max: *mut u32,
     ) -> c_int;
 
+    pub fn botan_x509_ext_ip_addr_blocks_destroy(
+        ip_addr_blocks: botan_x509_ext_ip_addr_blocks_t,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_ip_addr_blocks_create(
+        ip_addr_blocks: *mut botan_x509_ext_ip_addr_blocks_t,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_ip_addr_blocks_add_ip_addr(
+        ip_addr_blocks: botan_x509_ext_ip_addr_blocks_t,
+        min: *const u8,
+        max: *const u8,
+        ipv6: c_int,
+        safi: *const u8,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_ip_addr_blocks_restrict(
+        ip_addr_blocks: botan_x509_ext_ip_addr_blocks_t,
+        ipv6: c_int,
+        safi: *const u8,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_ip_addr_blocks_inherit(
+        ip_addr_blocks: botan_x509_ext_ip_addr_blocks_t,
+        ipv6: c_int,
+        safi: *const u8,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_as_blocks_destroy(as_blocks: botan_x509_ext_as_blocks_t) -> c_int;
+
+    pub fn botan_x509_ext_as_blocks_create(as_blocks: *mut botan_x509_ext_as_blocks_t) -> c_int;
+
+    pub fn botan_x509_ext_as_blocks_add_range(
+        as_blocks: botan_x509_ext_as_blocks_t,
+        asnum: c_int,
+        min: u32,
+        max: u32,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_as_blocks_restrict(
+        as_blocks: botan_x509_ext_as_blocks_t,
+        asnum: c_int,
+    ) -> c_int;
+
+    pub fn botan_x509_ext_as_blocks_inherit(
+        as_blocks: botan_x509_ext_as_blocks_t,
+        asnum: c_int,
+    ) -> c_int;
+
     pub fn botan_x509_crl_load_file(crl: *mut botan_x509_crl_t, file_path: *const c_char) -> c_int;
 
     pub fn botan_x509_crl_load(
@@ -592,6 +647,18 @@ botan_ffi_functions! {
     pub fn botan_x509_cert_builder_set_as_ca_certificate(
         builder: botan_x509_cert_builder_t,
         limit: *const usize,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_add_ext_ip_addr_blocks(
+        builder: botan_x509_cert_builder_t,
+        ip_addr_blocks: botan_x509_ext_ip_addr_blocks_t,
+        is_critical: c_int,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_add_ext_as_blocks(
+        builder: botan_x509_cert_builder_t,
+        as_blocks: botan_x509_ext_as_blocks_t,
+        is_critical: c_int,
     ) -> c_int;
 
     pub fn botan_x509_cert_builder_into_self_signed_cert(

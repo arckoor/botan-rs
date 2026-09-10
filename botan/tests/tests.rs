@@ -2,7 +2,9 @@ extern crate botan;
 
 use std::str::FromStr;
 
-use botan::{CertUsage, CertificateBuilder, MPI, Privkey};
+use botan::{
+    ASBlocks, CertUsage, CertificateBuilder, IPAddrBlocks, MPI, Privkey, RandomNumberGenerator,
+};
 
 /// If the first Botan call in a test fails with NotImplemented, the
 /// functionality was not compiled into the library we are running against,
@@ -1877,6 +1879,88 @@ fn test_cert_creation() -> Result<(), botan::Error> {
         &ca_cert, &ca_key, &cert_key, &mut rng, not_before, not_after, None, None, None,
     )?;
     assert!(cert.verify(&[], &[&ca_cert], None, None, None)?.success());
+
+    Ok(())
+}
+
+#[test]
+fn test_cert_creation_exts() -> Result<(), botan::Error> {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    let group = "secp256r1";
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let not_before = now - 180;
+    let not_after = now + 86400;
+
+    let mut rng = RandomNumberGenerator::new()?;
+    let key = Privkey::create("ECDSA", group, &mut rng)?;
+    let mut builder = CertificateBuilder::new()?;
+
+    let mut ip_addr_blocks = IPAddrBlocks::new()?;
+    ip_addr_blocks.add_addr(&IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)), None)?;
+    ip_addr_blocks.add_addr_range(
+        &IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+        &IpAddr::V4(Ipv4Addr::new(10, 0, 255, 255)),
+        None,
+    )?;
+    ip_addr_blocks.inherit(false, Some(41))?;
+    ip_addr_blocks.restrict(false, Some(42))?;
+    ip_addr_blocks.add_addr(
+        &IpAddr::V6(Ipv6Addr::new(
+            0xab, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        )),
+        None,
+    )?;
+    ip_addr_blocks.restrict(true, Some(234))?;
+
+    let mut as_blocks = ASBlocks::new()?;
+    as_blocks.add_asnum(30)?;
+    as_blocks.add_asnum_range(3000, 4999)?;
+    as_blocks.restrict_rdi()?;
+
+    builder.add_ext_ip_addr_blocks(&ip_addr_blocks, true)?;
+    builder.add_ext_as_blocks(&as_blocks, true)?;
+
+    let cert =
+        builder.into_self_signed_cert(&key, &mut rng, not_before, not_after, None, None, None)?;
+
+    let (v4, v6) = cert.ext_ip_addr_blocks()?;
+    assert_eq!(
+        v4,
+        vec![
+            (
+                None,
+                Some(vec![
+                    (Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 255, 255)),
+                    (Ipv4Addr::new(192, 168, 2, 1), Ipv4Addr::new(192, 168, 2, 1))
+                ])
+            ),
+            (Some(41), None),
+            (Some(42), Some(vec![])),
+        ]
+    );
+    assert_eq!(
+        v6,
+        vec![
+            (
+                None,
+                Some(vec![(
+                    Ipv6Addr::new(0xab, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01),
+                    Ipv6Addr::new(0xab, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01)
+                )])
+            ),
+            (Some(234), Some(vec![]))
+        ]
+    );
+
+    assert_eq!(
+        cert.ext_as_blocks_asnum()?,
+        Some(vec![(30, 30), (3000, 4999)])
+    );
+    assert_eq!(cert.ext_as_blocks_rdi()?, Some(vec![]));
 
     Ok(())
 }

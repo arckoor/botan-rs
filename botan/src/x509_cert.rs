@@ -1,4 +1,4 @@
-use core::net::{Ipv4Addr, Ipv6Addr};
+use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::{CRL, MPI, OID, Privkey, RandomNumberGenerator, utils::*};
 use botan_sys::*;
@@ -775,6 +775,28 @@ impl CertificateBuilder {
         )
     }
 
+    pub fn add_ext_ip_addr_blocks(
+        &mut self,
+        ip_addr_blocks: &IPAddrBlocks,
+        is_critical: bool,
+    ) -> Result<()> {
+        botan_call!(
+            botan_x509_cert_builder_add_ext_ip_addr_blocks,
+            self.obj,
+            ip_addr_blocks.handle(),
+            is_critical as i32
+        )
+    }
+
+    pub fn add_ext_as_blocks(&mut self, as_blocks: &ASBlocks, is_critical: bool) -> Result<()> {
+        botan_call!(
+            botan_x509_cert_builder_add_ext_as_blocks,
+            self.obj,
+            as_blocks.handle(),
+            is_critical as i32
+        )
+    }
+
     pub fn into_self_signed_cert(
         &self,
         key: &Privkey,
@@ -879,6 +901,124 @@ impl CertificateBuilder {
         )?;
 
         Ok(PKCS10Request { obj })
+    }
+}
+
+pub struct IPAddrBlocks {
+    obj: botan_x509_ext_ip_addr_blocks_t,
+}
+
+unsafe impl Sync for IPAddrBlocks {}
+unsafe impl Send for IPAddrBlocks {}
+
+botan_impl_drop!(IPAddrBlocks, botan_x509_ext_ip_addr_blocks_destroy);
+
+impl IPAddrBlocks {
+    pub fn new() -> Result<IPAddrBlocks> {
+        let obj = botan_init!(botan_x509_ext_ip_addr_blocks_create)?;
+        Ok(IPAddrBlocks { obj })
+    }
+
+    pub(crate) fn handle(&self) -> botan_x509_ext_ip_addr_blocks_t {
+        self.obj
+    }
+
+    pub fn add_addr(&mut self, addr: &IpAddr, safi: Option<u8>) -> Result<()> {
+        self.add_addr_range(addr, addr, safi)
+    }
+
+    pub fn add_addr_range(&mut self, min: &IpAddr, max: &IpAddr, safi: Option<u8>) -> Result<()> {
+        let (min, max, ipv6) = match (min, max) {
+            (IpAddr::V4(min), IpAddr::V4(max)) => (min.octets().to_vec(), max.octets().to_vec(), 0),
+            (IpAddr::V6(min), IpAddr::V6(max)) => (min.octets().to_vec(), max.octets().to_vec(), 1),
+            _ => {
+                return Err(Error::bad_parameter(
+                    "Both addresses must use the same IP version",
+                ));
+            }
+        };
+
+        botan_call!(
+            botan_x509_ext_ip_addr_blocks_add_ip_addr,
+            self.obj,
+            min.as_ptr(),
+            max.as_ptr(),
+            ipv6,
+            safi.as_ref()
+                .map_or(std::ptr::null(), |safi| safi as *const u8)
+        )
+    }
+
+    pub fn restrict(&mut self, ipv6: bool, safi: Option<u8>) -> Result<()> {
+        botan_call!(
+            botan_x509_ext_ip_addr_blocks_restrict,
+            self.obj,
+            ipv6 as i32,
+            safi.as_ref()
+                .map_or(std::ptr::null(), |safi| safi as *const u8)
+        )
+    }
+
+    pub fn inherit(&mut self, ipv6: bool, safi: Option<u8>) -> Result<()> {
+        botan_call!(
+            botan_x509_ext_ip_addr_blocks_inherit,
+            self.obj,
+            ipv6 as i32,
+            safi.as_ref()
+                .map_or(std::ptr::null(), |safi| safi as *const u8)
+        )
+    }
+}
+
+pub struct ASBlocks {
+    obj: botan_x509_ext_as_blocks_t,
+}
+
+unsafe impl Sync for ASBlocks {}
+unsafe impl Send for ASBlocks {}
+
+botan_impl_drop!(ASBlocks, botan_x509_ext_as_blocks_destroy);
+
+impl ASBlocks {
+    pub fn new() -> Result<ASBlocks> {
+        let obj = botan_init!(botan_x509_ext_as_blocks_create)?;
+        Ok(ASBlocks { obj })
+    }
+
+    pub(crate) fn handle(&self) -> botan_x509_ext_as_blocks_t {
+        self.obj
+    }
+
+    pub fn add_asnum(&mut self, asnum: u32) -> Result<()> {
+        self.add_asnum_range(asnum, asnum)
+    }
+
+    pub fn add_asnum_range(&mut self, min: u32, max: u32) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_add_range, self.obj, 1, min, max)
+    }
+
+    pub fn restrict_asnum(&mut self) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_restrict, self.obj, 1)
+    }
+
+    pub fn inherit_asnum(&mut self) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_inherit, self.obj, 1)
+    }
+
+    pub fn add_rdi(&mut self, rdi: u32) -> Result<()> {
+        self.add_rdi_range(rdi, rdi)
+    }
+
+    pub fn add_rdi_range(&mut self, min: u32, max: u32) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_add_range, self.obj, 0, min, max)
+    }
+
+    pub fn restrict_rdi(&mut self) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_restrict, self.obj, 0)
+    }
+
+    pub fn inherit_rdi(&mut self) -> Result<()> {
+        botan_call!(botan_x509_ext_as_blocks_inherit, self.obj, 0)
     }
 }
 

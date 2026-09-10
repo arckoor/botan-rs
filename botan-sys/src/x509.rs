@@ -19,6 +19,12 @@ pub type botan_x509_crl_entry_t = *mut botan_x509_crl_entry_struct;
 pub enum botan_x509_general_name_struct {}
 pub type botan_x509_general_name_t = *mut botan_x509_general_name_struct;
 
+pub enum botan_x509_cert_builder_struct {}
+pub type botan_x509_cert_builder_t = *mut botan_x509_cert_builder_struct;
+
+pub enum botan_x509_pkcs10_req_struct {}
+pub type botan_x509_pkcs10_req_t = *mut botan_x509_pkcs10_req_struct;
+
 #[repr(u32)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum X509KeyConstraints {
@@ -74,6 +80,23 @@ pub enum X509CrlReasonCode {
     BOTAN_CRL_ENTRY_REMOVE_FROM_CRL = 8,
     BOTAN_CRL_ENTRY_PRIVILEGE_WITHDRAWN = 9,
     BOTAN_CRL_ENTRY_AA_COMPROMISE = 10,
+}
+
+#[repr(i32)]
+pub enum X509CertBuilderDnAltNameType {
+    BOTAN_X509_CERT_BUILDER_COMMON_NAME = 0,
+    BOTAN_X509_CERT_BUILDER_COUNTRY = 1,
+    BOTAN_X509_CERT_BUILDER_ORGANIZATION = 2,
+    BOTAN_X509_CERT_BUILDER_ORGANIZATIONAL_UNIT = 3,
+    BOTAN_X509_CERT_BUILDER_LOCALITY = 4,
+    BOTAN_X509_CERT_BUILDER_STATE = 5,
+    BOTAN_X509_CERT_BUILDER_SERIAL_NUMBER = 6,
+    BOTAN_X509_CERT_BUILDER_EMAIL = 7,
+    BOTAN_X509_CERT_BUILDER_DNS = 8,
+    BOTAN_X509_CERT_BUILDER_URI = 9,
+    BOTAN_X509_CERT_BUILDER_IPV4 = 10,
+    BOTAN_X509_CERT_BUILDER_IPV6 = 11,
+    BOTAN_X509_CERT_BUILDER_XMPP = 12,
 }
 
 impl TryFrom<i32> for X509CrlReasonCode {
@@ -544,5 +567,114 @@ botan_ffi_functions! {
         required_key_strength: usize,
         hostname: *const c_char,
         reference_time: u64,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_destroy(builder: botan_x509_cert_builder_t) -> c_int;
+
+    pub fn botan_x509_cert_builder_create(builder: *mut botan_x509_cert_builder_t) -> c_int;
+
+    pub fn botan_x509_cert_builder_add_dn_or_alt_name_value(
+        builder: botan_x509_cert_builder_t,
+        type_: c_int,
+        hash_fn: *const c_char,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_add_allowed_usage(
+        builder: botan_x509_cert_builder_t,
+        usage: u32,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_add_allowed_extended_usage(
+        builder: botan_x509_cert_builder_t,
+        oid: botan_asn1_oid_t,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_set_as_ca_certificate(
+        builder: botan_x509_cert_builder_t,
+        limit: *const usize,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_into_self_signed_cert(
+        cert_obj: *mut botan_x509_cert_t,
+        builder: botan_x509_cert_builder_t,
+        key: botan_privkey_t,
+        rng: botan_rng_t,
+        not_before: u64,
+        not_after: u64,
+        serial_number: *const botan_mp_t,
+        hash_fn: *const c_char,
+        padding: *const c_char,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_into_cert(
+        cert_obj: *mut botan_x509_cert_t,
+        builder: botan_x509_cert_builder_t,
+        ca_cert: botan_x509_cert_t,
+        ca_key: botan_privkey_t,
+        key: botan_privkey_t,
+        rng: botan_rng_t,
+        not_before: u64,
+        not_after: u64,
+        serial_number: *const botan_mp_t,
+        hash_fn: *const c_char,
+        padding: *const c_char,
+    ) -> c_int;
+
+    pub fn botan_x509_cert_builder_into_pkcs10_req(
+        req_obj: *mut botan_x509_pkcs10_req_t,
+        builder: botan_x509_cert_builder_t,
+        key: botan_privkey_t,
+        rng: botan_rng_t,
+        hash_fn: *const c_char,
+        padding: *const c_char,
+        challenge_password: *const c_char,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_destroy(req: botan_x509_pkcs10_req_t) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_load_file(
+        req_obj: *mut botan_x509_pkcs10_req_t,
+        req_path: *const c_char,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_load(
+        req_obj: *mut botan_x509_pkcs10_req_t,
+        req_bits: *const u8,
+        req_len: usize,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_view_pem(
+        req: botan_x509_pkcs10_req_t,
+        ctx: botan_view_ctx,
+        view: botan_view_str_fn,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_view_der(
+        req: botan_x509_pkcs10_req_t,
+        ctx: botan_view_ctx,
+        view: botan_view_bin_fn,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_get_public_key(
+        req: botan_x509_pkcs10_req_t,
+        key: *mut botan_pubkey_t,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_verify_signature(
+        req: botan_x509_pkcs10_req_t,
+        key: botan_pubkey_t,
+    ) -> c_int;
+
+    pub fn botan_x509_pkcs10_req_sign(
+        subject_cert: *mut botan_x509_cert_t,
+        subject_req: botan_x509_pkcs10_req_t,
+        ca_cert: botan_x509_cert_t,
+        ca_key: botan_privkey_t,
+        rng: botan_rng_t,
+        not_before: u64,
+        not_after: u64,
+        serial_number: *const botan_mp_t,
+        hash_fn: *const c_char,
+        padding: *const c_char,
     ) -> c_int;
 }

@@ -2,6 +2,8 @@ extern crate botan;
 
 use std::str::FromStr;
 
+use botan::{CertUsage, CertificateBuilder, MPI, Privkey};
+
 /// If the first Botan call in a test fails with NotImplemented, the
 /// functionality was not compiled into the library we are running against,
 /// and the test is skipped. This must only be applied to a test's initial
@@ -1812,6 +1814,69 @@ VaIdhfLji2fOE9P8vx9O
             (Some(1), None)
         ]
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_cert_creation() -> Result<(), botan::Error> {
+    let group = "secp256r1";
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let not_before = now - 180;
+    let not_after = now + 86400;
+
+    let mut rng = botan::RandomNumberGenerator::new()?;
+    let ca_key = Privkey::create("ECDSA", group, &mut rng)?;
+    let mut ca_builder = CertificateBuilder::new()?;
+    ca_builder.add_common_name("Test CA")?;
+    ca_builder.add_country("US")?;
+    ca_builder.add_organization("Botan Project")?;
+    ca_builder.add_organizational_unit("Testing")?;
+    ca_builder.set_as_ca_certificate(Some(1))?;
+    let ca_cert = ca_builder
+        .into_self_signed_cert(&ca_key, &mut rng, not_before, not_after, None, None, None)?;
+    assert!(
+        ca_cert
+            .verify(&[], &[&ca_cert], None, None, None)?
+            .success()
+    );
+
+    let cert_key = Privkey::create("ECDSA", group, &mut rng)?;
+    let mut req_builder = CertificateBuilder::new()?;
+    req_builder.add_allowed_usage(&[CertUsage::DigitalSignature])?;
+    req_builder.add_uri("https://botan.randombit.net")?;
+    for dns in [
+        "imaginary.botan.randombit.net",
+        "botan.randombit.net",
+        "randombit.net",
+    ] {
+        req_builder.add_dns(dns)?;
+    }
+    let req = req_builder.into_request(&cert_key, &mut rng, None, None, None)?;
+    assert!(req.verify(&req.pubkey()?)?);
+    assert!(req.verify(&cert_key.pubkey()?)?);
+
+    let serial = MPI::from_str("123456")?;
+    let cert = req.sign(
+        &ca_cert,
+        &ca_key,
+        &mut rng,
+        not_before,
+        not_after,
+        Some(&serial),
+        None,
+        None,
+    )?;
+    assert!(cert.verify(&[], &[&ca_cert], None, None, None)?.success());
+    assert_eq!(cert.serial_no()?, MPI::from_str("123456")?);
+
+    let cert = req_builder.into_cert(
+        &ca_cert, &ca_key, &cert_key, &mut rng, not_before, not_after, None, None, None,
+    )?;
+    assert!(cert.verify(&[], &[&ca_cert], None, None, None)?.success());
 
     Ok(())
 }

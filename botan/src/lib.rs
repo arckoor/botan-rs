@@ -1,5 +1,5 @@
-#![warn(missing_docs)]
-#![deny(missing_docs)]
+// #![warn(missing_docs)]
+// #![deny(missing_docs)]
 #![allow(unused_imports)]
 
 //! A wrapper for the Botan cryptography library

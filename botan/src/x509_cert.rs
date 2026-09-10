@@ -1,6 +1,6 @@
 use core::net::{Ipv4Addr, Ipv6Addr};
 
-use crate::{CRL, utils::*};
+use crate::{CRL, MPI, OID, Privkey, RandomNumberGenerator, utils::*};
 use botan_sys::*;
 
 use crate::pubkey::Pubkey;
@@ -146,6 +146,11 @@ impl Certificate {
         call_botan_ffi_returning_vec_u8(sn_len, &|out_buf, out_len| unsafe {
             botan_x509_cert_get_serial_number(self.obj, out_buf, out_len)
         })
+    }
+
+    pub fn serial_no(&self) -> Result<MPI> {
+        let obj = botan_init_at!(botan_x509_cert_serial_number, self.obj;)?;
+        MPI::from_handle(obj)
     }
 
     /// Return the fingerprint of this certificate
@@ -621,5 +626,339 @@ impl Certificate {
         } else {
             Err(Error::from_rc(rc))
         }
+    }
+}
+
+pub struct CertificateBuilder {
+    obj: botan_x509_cert_builder_t,
+}
+
+unsafe impl Sync for CertificateBuilder {}
+unsafe impl Send for CertificateBuilder {}
+
+botan_impl_drop!(CertificateBuilder, botan_x509_cert_builder_destroy);
+
+impl CertificateBuilder {
+    pub fn new() -> Result<CertificateBuilder> {
+        let obj = botan_init!(botan_x509_cert_builder_create)?;
+        Ok(CertificateBuilder { obj })
+    }
+
+    fn add_alt_or_dn_name(&self, value: &str, type_: X509CertBuilderDnAltNameType) -> Result<()> {
+        let v = make_cstr(value)?;
+        botan_call!(
+            botan_x509_cert_builder_add_dn_or_alt_name_value,
+            self.obj,
+            type_ as i32,
+            v.as_ptr()
+        )
+    }
+
+    pub fn add_common_name(&mut self, name: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            name,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_country(&mut self, country: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            country,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_organization(&mut self, organization: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            organization,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_organizational_unit(&mut self, org_unit: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            org_unit,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_locality(&mut self, locality: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            locality,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_state(&mut self, state: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            state,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_serial_number(&mut self, serial_number: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            serial_number,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_email(&mut self, email: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            email,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_uri(&mut self, uri: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            uri,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_dns(&mut self, dns: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            dns,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_ipv4(&mut self, ip: &Ipv4Addr) -> Result<()> {
+        self.add_alt_or_dn_name(
+            &ip.to_string(),
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_ipv6(&mut self, ip: &Ipv6Addr) -> Result<()> {
+        self.add_alt_or_dn_name(
+            &ip.to_string(),
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_xmpp(&mut self, xmpp: &str) -> Result<()> {
+        self.add_alt_or_dn_name(
+            xmpp,
+            X509CertBuilderDnAltNameType::BOTAN_X509_CERT_BUILDER_COMMON_NAME,
+        )
+    }
+
+    pub fn add_allowed_usage(&mut self, usages: &[CertUsage]) -> Result<()> {
+        let mut usage_bits = 0;
+        for usage in usages {
+            usage_bits |= X509KeyConstraints::from(*usage) as u32;
+        }
+        botan_call!(
+            botan_x509_cert_builder_add_allowed_usage,
+            self.obj,
+            usage_bits
+        )
+    }
+
+    pub fn add_allowed_extended_usage(&mut self, oid: &OID) -> Result<()> {
+        botan_call!(
+            botan_x509_cert_builder_add_allowed_extended_usage,
+            self.obj,
+            oid.handle()
+        )
+    }
+
+    pub fn set_as_ca_certificate(&mut self, limit: Option<usize>) -> Result<()> {
+        botan_call!(
+            botan_x509_cert_builder_set_as_ca_certificate,
+            self.obj,
+            limit
+                .as_ref()
+                .map_or(ptr::null(), |limit| limit as *const _)
+        )
+    }
+
+    pub fn into_self_signed_cert(
+        &self,
+        key: &Privkey,
+        rng: &mut RandomNumberGenerator,
+        not_before: u64,
+        not_after: u64,
+        serial_number: Option<&MPI>,
+        hash_fn: Option<&str>,
+        padding: Option<&str>,
+    ) -> Result<Certificate> {
+        let hash_fn = make_optional_cstr(hash_fn)?;
+        let padding = make_optional_cstr(padding)?;
+        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_ptr = serial_handle
+            .as_ref()
+            .map_or(std::ptr::null(), |handle| handle as *const _);
+
+        let obj = botan_init!(
+            botan_x509_cert_builder_into_self_signed_cert,
+            self.obj,
+            key.handle(),
+            rng.handle(),
+            not_before,
+            not_after,
+            serial_ptr,
+            hash_fn
+                .as_ref()
+                .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
+            padding
+                .as_ref()
+                .map_or(std::ptr::null(), |padding| padding.as_ptr())
+        )?;
+        Ok(Certificate { obj })
+    }
+
+    pub fn into_cert(
+        &self,
+        ca_cert: &Certificate,
+        ca_key: &Privkey,
+        key: &Privkey,
+        rng: &mut RandomNumberGenerator,
+        not_before: u64,
+        not_after: u64,
+        serial_number: Option<&MPI>,
+        hash_fn: Option<&str>,
+        padding: Option<&str>,
+    ) -> Result<Certificate> {
+        let hash_fn = make_optional_cstr(hash_fn)?;
+        let padding = make_optional_cstr(padding)?;
+        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_ptr = serial_handle
+            .as_ref()
+            .map_or(std::ptr::null(), |handle| handle as *const _);
+
+        let obj = botan_init!(
+            botan_x509_cert_builder_into_cert,
+            self.obj,
+            ca_cert.handle(),
+            ca_key.handle(),
+            key.handle(),
+            rng.handle(),
+            not_before,
+            not_after,
+            serial_ptr,
+            hash_fn
+                .as_ref()
+                .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
+            padding
+                .as_ref()
+                .map_or(std::ptr::null(), |padding| padding.as_ptr())
+        )?;
+
+        Ok(Certificate { obj })
+    }
+
+    pub fn into_request(
+        &self,
+        key: &Privkey,
+        rng: &mut RandomNumberGenerator,
+        hash_fn: Option<&str>,
+        padding: Option<&str>,
+        challenge_password: Option<&str>,
+    ) -> Result<PKCS10Request> {
+        let hash_fn = make_optional_cstr(hash_fn)?;
+        let padding = make_optional_cstr(padding)?;
+        let challenge_password = make_optional_cstr(challenge_password)?;
+
+        let obj = botan_init!(
+            botan_x509_cert_builder_into_pkcs10_req,
+            self.obj,
+            key.handle(),
+            rng.handle(),
+            hash_fn
+                .as_ref()
+                .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
+            padding
+                .as_ref()
+                .map_or(std::ptr::null(), |padding| padding.as_ptr()),
+            challenge_password
+                .as_ref()
+                .map_or(std::ptr::null(), |ch_pw| ch_pw.as_ptr())
+        )?;
+
+        Ok(PKCS10Request { obj })
+    }
+}
+
+pub struct PKCS10Request {
+    obj: botan_x509_pkcs10_req_t,
+}
+
+unsafe impl Sync for PKCS10Request {}
+unsafe impl Send for PKCS10Request {}
+
+botan_impl_drop!(PKCS10Request, botan_x509_pkcs10_req_destroy);
+
+impl PKCS10Request {
+    pub fn load(data: &[u8]) -> Result<PKCS10Request> {
+        let obj = botan_init!(botan_x509_pkcs10_req_load, data.as_ptr(), data.len())?;
+        Ok(Self { obj })
+    }
+
+    pub fn from_file(fsname: &str) -> Result<PKCS10Request> {
+        let fsname = make_cstr(fsname)?;
+        let obj = botan_init!(botan_x509_pkcs10_req_load_file, fsname.as_ptr())?;
+        Ok(Self { obj })
+    }
+
+    pub fn pubkey(&self) -> Result<Pubkey> {
+        let obj = botan_init_at!(botan_x509_pkcs10_req_get_public_key, self.obj;)?;
+        Ok(Pubkey::from_handle(obj))
+    }
+
+    pub fn verify(&self, key: &Pubkey) -> Result<bool> {
+        let res = botan_bool_in_rc!(
+            botan_x509_pkcs10_req_verify_signature,
+            self.obj,
+            key.handle()
+        )?;
+        Ok(res)
+    }
+
+    pub fn pem_encode(&self) -> Result<String> {
+        botan_view_str!(botan_x509_pkcs10_req_view_pem, self.obj)
+    }
+
+    pub fn der_encode(&self) -> Result<Vec<u8>> {
+        botan_view_vec!(botan_x509_pkcs10_req_view_der, self.obj)
+    }
+
+    pub fn sign(
+        &self,
+        ca_cert: &Certificate,
+        ca_key: &Privkey,
+        rng: &mut RandomNumberGenerator,
+        not_before: u64,
+        not_after: u64,
+        serial_number: Option<&MPI>,
+        hash_fn: Option<&str>,
+        padding: Option<&str>,
+    ) -> Result<Certificate> {
+        let hash_fn = make_optional_cstr(hash_fn)?;
+        let padding = make_optional_cstr(padding)?;
+        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_ptr = serial_handle
+            .as_ref()
+            .map_or(std::ptr::null(), |handle| handle as *const _);
+
+        let obj = botan_init!(
+            botan_x509_pkcs10_req_sign,
+            self.obj,
+            ca_cert.handle(),
+            ca_key.handle(),
+            rng.handle(),
+            not_before,
+            not_after,
+            serial_ptr,
+            hash_fn
+                .as_ref()
+                .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
+            padding
+                .as_ref()
+                .map_or(std::ptr::null(), |padding| padding.as_ptr())
+        )?;
+        Ok(Certificate { obj })
     }
 }

@@ -879,6 +879,7 @@ fn wycheproof_ecdsa_verify_tests() -> Result<(), botan::Error> {
     use wycheproof::ecdsa::*;
 
     let is_botan2 = botan::Version::current()?.major == 2;
+    let is_pre_3_11 = !botan::Version::current()?.at_least(3, 11);
 
     for test_name in TestName::all() {
         if test_name == TestName::EcdsaSecp256k1Sha256Bitcoin {
@@ -917,6 +918,25 @@ fn wycheproof_ecdsa_verify_tests() -> Result<(), botan::Error> {
                 continue_if_not_implemented!(botan::Verifier::new(&key, format!("EMSA1({hash})")));
 
             for test in &test_group.tests {
+                // Skip some tests that fail before https://github.com/randombit/botan/pull/5412
+                if is_pre_3_11 {
+                    let affected_group = matches!(
+                        test_group.key.curve,
+                        EllipticCurve::Secp160k1
+                            | EllipticCurve::Secp160r1
+                            | EllipticCurve::Secp160r2
+                            | EllipticCurve::Secp224k1
+                    );
+
+                    let arithmetic_test = test
+                        .flags
+                        .contains(&wycheproof::ecdsa::TestFlag::ArithmeticError);
+
+                    if affected_group && arithmetic_test {
+                        continue;
+                    }
+                }
+
                 let accept = if is_ieee {
                     verifier_ieee.update(&test.msg)?;
                     verifier_ieee.finish(&test.sig)?

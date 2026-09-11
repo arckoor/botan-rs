@@ -7,7 +7,7 @@
 This crate wraps the C API exposed by the [Botan](https://botan.randombit.net/)
 cryptography library.
 
-Currently the crate exposes ciphers, hashes, MACs, KDFs, password based key
+Currently the crate exposes ciphers, hashes, XOFs, MACs, KDFs, password based key
 derivation (PBKDF2, Scrypt, Argon2, etc), bcrypt password hashes, random number
 generators, X.509 certificates, format preserving encryption, HOTP/TOTP, NIST
 key wrapping, multiprecision integers, and the usual public key algorithms (RSA,

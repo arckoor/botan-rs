@@ -38,6 +38,11 @@ define_identifier_trait!(
 );
 
 define_identifier_trait!(
+    /// A type that identifies a Botan extendable-output function.
+    XofAlgorithmIdentifier
+);
+
+define_identifier_trait!(
     /// A type that identifies a Botan block cipher.
     BlockCipherAlgorithmIdentifier
 );
@@ -168,6 +173,38 @@ impl HashAlgorithm {
 impl HashAlgorithmIdentifier for HashAlgorithm {
     fn botan_name(&self) -> String {
         HashAlgorithm::botan_name(self)
+    }
+}
+
+/// Algorithms accepted by Botan's extendable-output function interface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum XofAlgorithm {
+    /// Any Botan XOF identifier not modeled by this enum.
+    Arbitrary(String),
+    /// SHAKE-128.
+    Shake128,
+    /// SHAKE-256.
+    Shake256,
+    /// Ascon-XOF128.
+    AsconXof128,
+}
+
+impl XofAlgorithm {
+    /// Return the Botan interface string for this XOF.
+    #[must_use]
+    pub fn botan_name(&self) -> String {
+        match self {
+            Self::Arbitrary(name) => name.clone(),
+            Self::Shake128 => "SHAKE-128".to_string(),
+            Self::Shake256 => "SHAKE-256".to_string(),
+            Self::AsconXof128 => "Ascon-XOF128".to_string(),
+        }
+    }
+}
+
+impl XofAlgorithmIdentifier for XofAlgorithm {
+    fn botan_name(&self) -> String {
+        XofAlgorithm::botan_name(self)
     }
 }
 

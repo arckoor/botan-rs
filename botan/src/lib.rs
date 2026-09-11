@@ -181,6 +181,7 @@ mod utils;
 mod version;
 mod x509_cert;
 mod x509_crl;
+mod xof;
 mod zfec;
 
 pub use algo::*;
@@ -206,6 +207,7 @@ pub use utils::*;
 pub use version::*;
 pub use x509_cert::*;
 pub use x509_crl::*;
+pub use xof::*;
 pub use zfec::*;
 
 mod pk_ops_kem;

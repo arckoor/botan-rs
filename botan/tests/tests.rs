@@ -153,6 +153,135 @@ fn test_hash() -> Result<(), botan::Error> {
 }
 
 #[test]
+fn test_xof_vectors() -> Result<(), botan::Error> {
+    // NIST CAVS SHAKE and ACVP Ascon-XOF128 vectors, also used by Botan's
+    // src/tests/data/xof/{shake,ascon_xof128}.vec.
+    for (algo, name, block_size, input, expected) in [
+        (
+            botan::XofAlgorithm::Shake128,
+            "SHAKE-128",
+            168,
+            "32a36452a646beba4bf611e0bf2cfcb6",
+            "3df0ccef456072f3daa5642d4b02bd5f",
+        ),
+        (
+            botan::XofAlgorithm::Shake256,
+            "SHAKE-256",
+            136,
+            "dc886df3f69c49513de3627e9481db5871e8ee88eb9f99611541930a8bc885e0",
+            "00648afbc5e651649db1fd82936b00dbbc122fb4c877860d385c4950d56de7e0",
+        ),
+        (
+            botan::XofAlgorithm::AsconXof128,
+            "Ascon-XOF128",
+            8,
+            "",
+            "473d5e6164f58b39",
+        ),
+        (
+            botan::XofAlgorithm::AsconXof128,
+            "Ascon-XOF128",
+            8,
+            "dd",
+            "21f0ea9d11b85db0350db0b4",
+        ),
+    ] {
+        let mut xof = match botan::Xof::new(&algo) {
+            Ok(xof) => xof,
+            Err(e) if e.error_type() == botan::ErrorType::NotImplemented => continue,
+            Err(e) => return Err(e),
+        };
+        assert_eq!(xof.algo_name()?, name);
+        assert_eq!(xof.block_size()?, block_size);
+        assert!(xof.accepts_input()?);
+        assert!(xof.output(0)?.is_empty());
+        xof.output_into(&mut [])?;
+        xof.update(&[])?;
+        assert!(xof.accepts_input()?);
+
+        for chunk in hex::decode(input).unwrap().chunks(3) {
+            xof.update(chunk)?;
+        }
+        assert_eq!(hex::encode(xof.output(expected.len() / 2)?), expected);
+        assert!(!xof.accepts_input()?);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_xof_streaming_and_copying() -> Result<(), botan::Error> {
+    for algo in ["SHAKE-128", "SHAKE-256", "Ascon-XOF128"] {
+        let mut xof = match botan::Xof::new(algo) {
+            Ok(xof) => xof,
+            Err(e) if e.error_type() == botan::ErrorType::NotImplemented => continue,
+            Err(e) => return Err(e),
+        };
+        let input: Vec<u8> = (0..=255).cycle().take(4096).collect();
+        xof.update(&input[..255])?;
+        let mut prefix_copy = xof.duplicate()?;
+
+        for chunk in input[255..].chunks(37) {
+            xof.update(chunk)?;
+        }
+        prefix_copy.update(&input[255..])?;
+        let expected = prefix_copy.output(1025)?;
+
+        // Mix allocating output and output into caller-provided buffers,
+        // crossing internal block boundaries in both input and output.
+        let mut output = xof.output(1)?;
+        let mut rest = [0u8; 1024];
+        for chunk in rest.chunks_mut(73) {
+            xof.output_into(chunk)?;
+        }
+        output.extend_from_slice(&rest);
+        assert_eq!(output, expected);
+        assert!(!xof.accepts_input()?);
+        assert_eq!(
+            xof.update(b"more input").unwrap_err().error_type(),
+            botan::ErrorType::InvalidObjectState
+        );
+        xof.update(&[])?;
+        xof.output_into(&mut [])?;
+        assert!(xof.output(0)?.is_empty());
+        assert!(!xof.accepts_input()?);
+
+        let mut output_copy = xof.duplicate()?;
+        let mut cloned = xof.clone();
+        assert!(!output_copy.accepts_input()?);
+        let expected_tail = prefix_copy.output(333)?;
+        assert_eq!(xof.output(333)?, expected_tail);
+        assert_eq!(output_copy.output(333)?, expected_tail);
+        assert_eq!(cloned.output(333)?, expected_tail);
+        drop(xof);
+        assert_eq!(output_copy.output(512)?, cloned.output(512)?);
+
+        // Reset in both the output and input phases.
+        output_copy.clear()?;
+        assert!(output_copy.accepts_input()?);
+        output_copy.update(b"discarded message")?;
+        output_copy.clear()?;
+        output_copy.update(&input)?;
+        assert_eq!(output_copy.output(expected.len())?, expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_xof_errors() -> Result<(), botan::Error> {
+    let err = botan::Xof::new("BunnyXof9000").unwrap_err();
+    assert_eq!(err.error_type(), botan::ErrorType::NotImplemented);
+    if !botan::Version::supports_version(20260303) {
+        assert!(err.is_function_unavailable());
+        assert!(err.error_message().unwrap().contains("botan_xof_init"));
+    }
+    assert_eq!(
+        botan::Xof::new("SHAKE-128\0").unwrap_err().error_type(),
+        botan::ErrorType::ConversionError
+    );
+    Ok(())
+}
+
+#[test]
 fn test_algorithm_identifiers() -> Result<(), botan::Error> {
     let blake2b = botan::HashAlgorithm::Blake2b(256);
     assert_eq!(blake2b.botan_name(), "BLAKE2b(256)");

@@ -470,8 +470,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 impl From<i32> for ErrorType {
     fn from(err: i32) -> Self {

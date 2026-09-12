@@ -1,7 +1,7 @@
 use crate::utils::*;
 use botan_sys::*;
 
-use crate::EcGroup;
+use crate::{EcGroup, OID};
 
 use crate::{EcPoint, EcScalar};
 
@@ -286,7 +286,7 @@ impl Privkey {
         Ok(Privkey::from_obj(obj))
     }
 
-    /// Load a PKCS#1 encoded RSA private key
+    /// Load a DER-encoded PKCS#1 RSA private key
     pub fn load_rsa_pkcs1(pkcs1: &[u8]) -> Result<Privkey> {
         let obj = botan_init!(botan_privkey_load_rsa_pkcs1, pkcs1.as_ptr(), pkcs1.len())?;
         Ok(Privkey::from_obj(obj))
@@ -414,7 +414,17 @@ impl Privkey {
         privkey_algo_name(self.obj)
     }
 
-    /// DER encode the key (unencrypted)
+    /// Return the key algorithm's object identifier.
+    ///
+    /// For EC keys this identifies the key algorithm, not the curve.
+    ///
+    /// This requires Botan 3.8 or later; with older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned.
+    pub fn oid(&self) -> Result<OID> {
+        OID::from_handle(botan_init!(botan_privkey_oid, self.obj)?)
+    }
+
+    /// DER encode the key as an unencrypted PKCS#8 structure
     pub fn der_encode(&self) -> Result<Vec<u8>> {
         botan_view_vec!(botan_privkey_view_der, self.obj).or_if_unavailable(|| {
             call_botan_ffi_returning_vec_u8(4096, &|out_buf, out_len| unsafe {
@@ -423,12 +433,33 @@ impl Privkey {
         })
     }
 
-    /// PEM encode the private key (unencrypted)
+    /// PEM encode the private key as an unencrypted PKCS#8 structure
     pub fn pem_encode(&self) -> Result<String> {
         botan_view_str!(botan_privkey_view_pem, self.obj).or_if_unavailable(|| {
             call_botan_ffi_returning_string(4096, &|out_buf, out_len| unsafe {
                 botan_privkey_export(self.obj, out_buf, out_len, 1u32)
             })
+        })
+    }
+
+    /// DER encode an RSA private key as an unencrypted PKCS#1 RSAPrivateKey.
+    ///
+    /// Unlike [`Self::der_encode`], this does not include a PKCS#8 wrapper.
+    /// Returns an error if this is not an RSA key.
+    pub fn der_encode_rsa_pkcs1(&self) -> Result<Vec<u8>> {
+        call_botan_ffi_returning_vec_u8(4096, &|out_buf, out_len| unsafe {
+            botan_privkey_rsa_get_privkey(self.obj, out_buf, out_len, 0u32)
+        })
+    }
+
+    /// PEM encode an RSA private key as an unencrypted PKCS#1 RSAPrivateKey.
+    ///
+    /// Uses the `RSA PRIVATE KEY` label, unlike [`Self::pem_encode`], which
+    /// exports PKCS#8 with the `PRIVATE KEY` label.
+    /// Returns an error if this is not an RSA key.
+    pub fn pem_encode_rsa_pkcs1(&self) -> Result<String> {
+        call_botan_ffi_returning_string(4096, &|out_buf, out_len| unsafe {
+            botan_privkey_rsa_get_privkey(self.obj, out_buf, out_len, 1u32)
         })
     }
 
@@ -555,7 +586,7 @@ impl Privkey {
         })
     }
 
-    /// Check if the key in question is stateful (eg XMMS, LMS)
+    /// Check if the key in question is stateful (eg XMSS, LMS)
     ///
     /// This requires Botan 3.8 or later; with older versions an error of type
     /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned
@@ -563,6 +594,36 @@ impl Privkey {
         let mut stateful = 0;
         botan_call!(botan_privkey_stateful_operation, self.obj, &mut stateful)?;
         interp_as_bool(stateful, "botan_privkey_stateful_operation")
+    }
+
+    /// Return the number of operations remaining for a stateful private key.
+    ///
+    /// Returns `None` if the key has no operation limit, and `Some(0)` if the
+    /// key is exhausted. This is a snapshot, not a reservation of operations.
+    ///
+    /// This requires Botan 3.8 or later. For stateful keys, Botan 3.11 or later
+    /// is required because older versions do not safely synchronize this query
+    /// with signing. With older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned.
+    pub fn remaining_operations(&self) -> Result<Option<u64>> {
+        // The per-key lock does not cover standalone Signer objects, so it
+        // cannot protect reads of mutable signing state on older libraries.
+        if !crate::Version::supports_version(20260303) && self.is_stateful()? {
+            return Err(Error::with_message(
+                ErrorType::NotImplemented,
+                "Reading remaining operations of stateful keys requires Botan 3.11 or later"
+                    .to_owned(),
+            ));
+        }
+        let mut remaining = 0u64;
+        match unsafe { botan_privkey_remaining_operations(self.obj, &mut remaining) } {
+            0 => Ok(Some(remaining)),
+            BOTAN_FFI_ERROR_NO_VALUE => Ok(None),
+            rc => Err(Error::from_named_rc(
+                "botan_privkey_remaining_operations",
+                rc,
+            )),
+        }
     }
 
     /// Return the key agrement key, only valid for DH/ECDH
@@ -880,9 +941,31 @@ impl Pubkey {
         botan_view_vec!(botan_pubkey_view_ec_public_point, self.obj)
     }
 
+    /// Return whether this EC key's group was decoded from explicit parameters.
+    ///
+    /// Returns `false` for a named-curve encoding and an error for non-EC keys.
+    /// This describes the group's original encoding, not how future exports
+    /// will encode it, and does not describe the EC point's compression format.
+    ///
+    /// This requires Botan 3.2 or later; with older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned.
+    pub fn ecc_key_used_explicit_encoding(&self) -> Result<bool> {
+        botan_bool_in_rc!(botan_pubkey_ecc_key_used_explicit_encoding, self.obj)
+    }
+
     /// Return the name of the algorithm
     pub fn algo_name(&self) -> Result<String> {
         pubkey_algo_name(self.obj)
+    }
+
+    /// Return the key algorithm's object identifier.
+    ///
+    /// For EC keys this identifies the key algorithm, not the curve.
+    ///
+    /// This requires Botan 3.8 or later; with older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned.
+    pub fn oid(&self) -> Result<OID> {
+        OID::from_handle(botan_init!(botan_pubkey_oid, self.obj)?)
     }
 
     /// Get a value for the public key

@@ -98,6 +98,11 @@ define_identifier_trait!(
     RngTypeIdentifier
 );
 
+define_identifier_trait!(
+    /// A type that identifies a Botan deterministic random bit generator.
+    DrbgAlgorithmIdentifier
+);
+
 /// Hash functions accepted by Botan's hash interface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HashAlgorithm {
@@ -1376,5 +1381,31 @@ impl RngType {
 impl RngTypeIdentifier for RngType {
     fn botan_name(&self) -> String {
         RngType::botan_name(self)
+    }
+}
+
+/// Deterministic random bit generators accepted by Botan's seeded RNG interface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DrbgAlgorithm {
+    /// Any Botan DRBG identifier not modeled by this enum.
+    Arbitrary(String),
+    /// HMAC_DRBG using the specified hash function.
+    Hmac(HashAlgorithm),
+}
+
+impl DrbgAlgorithm {
+    /// Return the Botan interface string for this DRBG.
+    #[must_use]
+    pub fn botan_name(&self) -> String {
+        match self {
+            Self::Arbitrary(name) => name.clone(),
+            Self::Hmac(hash) => format!("HMAC_DRBG({})", hash.botan_name()),
+        }
+    }
+}
+
+impl DrbgAlgorithmIdentifier for DrbgAlgorithm {
+    fn botan_name(&self) -> String {
+        DrbgAlgorithm::botan_name(self)
     }
 }

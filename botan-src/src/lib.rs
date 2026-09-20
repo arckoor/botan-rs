@@ -75,6 +75,7 @@ fn configure(build_dir: &str) {
 
     for arg_name in &args {
         let env_name = env_name_for(arg_name);
+        println!("cargo:rerun-if-env-changed={env_name}");
         if let Ok(arg_val) = env::var(env_name) {
             let arg = format!("{arg_name}={arg_val}");
             configure.arg(arg);
@@ -83,6 +84,7 @@ fn configure(build_dir: &str) {
 
     for flag_name in &flags {
         let env_name = env_name_for(flag_name);
+        println!("cargo:rerun-if-env-changed={env_name}");
         if env::var(env_name).is_ok() {
             configure.arg(flag_name);
         }

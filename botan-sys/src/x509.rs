@@ -678,7 +678,7 @@ botan_ffi_functions! {
         builder: botan_x509_cert_builder_t,
         ca_cert: botan_x509_cert_t,
         ca_key: botan_privkey_t,
-        key: botan_privkey_t,
+        pubkey: botan_pubkey_t,
         rng: botan_rng_t,
         not_before: u64,
         not_after: u64,

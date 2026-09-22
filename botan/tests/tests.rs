@@ -3,7 +3,8 @@ extern crate botan;
 use std::str::FromStr;
 
 use botan::{
-    ASBlocks, CertUsage, CertificateBuilder, IPAddrBlocks, MPI, Privkey, RandomNumberGenerator,
+    ASBlocks, CertUsage, CertificateBuilder, HashAlgorithm, IPAddrBlocks, IntoCertOptions,
+    IntoRequestOptions, MPI, Privkey, RandomNumberGenerator, SignatureParams,
 };
 
 /// If the first Botan call in a test fails with NotImplemented, the
@@ -1838,8 +1839,12 @@ fn test_cert_creation() -> Result<(), botan::Error> {
     ca_builder.add_organization("Botan Project")?;
     ca_builder.add_organizational_unit("Testing")?;
     ca_builder.set_as_ca_certificate(Some(1))?;
-    let ca_cert = ca_builder
-        .into_self_signed_cert(&ca_key, &mut rng, not_before, not_after, None, None, None)?;
+    let ca_cert = ca_builder.into_self_signed_cert(
+        &ca_key,
+        IntoCertOptions::new(&mut rng, not_before, not_after)
+            .hash_fn(HashAlgorithm::Sha3(512))?
+            .padding(SignatureParams::Hash(HashAlgorithm::Sha3(512)))?,
+    )?;
     assert!(
         ca_cert
             .verify(&[], &[&ca_cert], None, None, None)?
@@ -1857,7 +1862,7 @@ fn test_cert_creation() -> Result<(), botan::Error> {
     ] {
         req_builder.add_dns(dns)?;
     }
-    let req = req_builder.into_request(&cert_key, &mut rng, None, None, None)?;
+    let req = req_builder.into_request(&cert_key, IntoRequestOptions::new(&mut rng))?;
     assert!(req.verify(&req.pubkey()?)?);
     assert!(req.verify(&cert_key.pubkey()?)?);
 
@@ -1865,18 +1870,16 @@ fn test_cert_creation() -> Result<(), botan::Error> {
     let cert = req.sign(
         &ca_cert,
         &ca_key,
-        &mut rng,
-        not_before,
-        not_after,
-        Some(&serial),
-        None,
-        None,
+        IntoCertOptions::new(&mut rng, not_before, not_after).serial_number(&serial),
     )?;
     assert!(cert.verify(&[], &[&ca_cert], None, None, None)?.success());
     assert_eq!(cert.serial_no()?, MPI::from_str("123456")?);
 
     let cert = req_builder.into_cert(
-        &ca_cert, &ca_key, &cert_key, &mut rng, not_before, not_after, None, None, None,
+        &ca_cert,
+        &ca_key,
+        &cert_key.pubkey()?,
+        IntoCertOptions::new(&mut rng, not_before, not_after),
     )?;
     assert!(cert.verify(&[], &[&ca_cert], None, None, None)?.success());
 
@@ -1924,8 +1927,8 @@ fn test_cert_creation_exts() -> Result<(), botan::Error> {
     builder.add_ext_ip_addr_blocks(&ip_addr_blocks, true)?;
     builder.add_ext_as_blocks(&as_blocks, true)?;
 
-    let cert =
-        builder.into_self_signed_cert(&key, &mut rng, not_before, not_after, None, None, None)?;
+    let cert = builder
+        .into_self_signed_cert(&key, IntoCertOptions::new(&mut rng, not_before, not_after))?;
 
     let (v4, v6) = cert.ext_ip_addr_blocks()?;
     assert_eq!(

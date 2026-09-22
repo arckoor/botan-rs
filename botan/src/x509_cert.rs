@@ -800,16 +800,9 @@ impl CertificateBuilder {
     pub fn into_self_signed_cert(
         &self,
         key: &Privkey,
-        rng: &mut RandomNumberGenerator,
-        not_before: u64,
-        not_after: u64,
-        serial_number: Option<&MPI>,
-        hash_fn: Option<&str>,
-        padding: Option<&str>,
+        options: IntoCertOptions,
     ) -> Result<Certificate> {
-        let hash_fn = make_optional_cstr(hash_fn)?;
-        let padding = make_optional_cstr(padding)?;
-        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_handle = options.serial_number.map(|sn| sn.handle());
         let serial_ptr = serial_handle
             .as_ref()
             .map_or(std::ptr::null(), |handle| handle as *const _);
@@ -818,14 +811,16 @@ impl CertificateBuilder {
             botan_x509_cert_builder_into_self_signed_cert,
             self.obj,
             key.handle(),
-            rng.handle(),
-            not_before,
-            not_after,
+            options.rng.handle(),
+            options.not_before,
+            options.not_after,
             serial_ptr,
-            hash_fn
+            options
+                .hash_fn
                 .as_ref()
                 .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
-            padding
+            options
+                .padding
                 .as_ref()
                 .map_or(std::ptr::null(), |padding| padding.as_ptr())
         )?;
@@ -836,17 +831,10 @@ impl CertificateBuilder {
         &self,
         ca_cert: &Certificate,
         ca_key: &Privkey,
-        key: &Privkey,
-        rng: &mut RandomNumberGenerator,
-        not_before: u64,
-        not_after: u64,
-        serial_number: Option<&MPI>,
-        hash_fn: Option<&str>,
-        padding: Option<&str>,
+        pubkey: &Pubkey,
+        options: IntoCertOptions,
     ) -> Result<Certificate> {
-        let hash_fn = make_optional_cstr(hash_fn)?;
-        let padding = make_optional_cstr(padding)?;
-        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_handle = options.serial_number.map(|sn| sn.handle());
         let serial_ptr = serial_handle
             .as_ref()
             .map_or(std::ptr::null(), |handle| handle as *const _);
@@ -856,15 +844,17 @@ impl CertificateBuilder {
             self.obj,
             ca_cert.handle(),
             ca_key.handle(),
-            key.handle(),
-            rng.handle(),
-            not_before,
-            not_after,
+            pubkey.handle(),
+            options.rng.handle(),
+            options.not_before,
+            options.not_after,
             serial_ptr,
-            hash_fn
+            options
+                .hash_fn
                 .as_ref()
                 .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
-            padding
+            options
+                .padding
                 .as_ref()
                 .map_or(std::ptr::null(), |padding| padding.as_ptr())
         )?;
@@ -875,32 +865,98 @@ impl CertificateBuilder {
     pub fn into_request(
         &self,
         key: &Privkey,
-        rng: &mut RandomNumberGenerator,
-        hash_fn: Option<&str>,
-        padding: Option<&str>,
-        challenge_password: Option<&str>,
+        options: IntoRequestOptions,
     ) -> Result<PKCS10Request> {
-        let hash_fn = make_optional_cstr(hash_fn)?;
-        let padding = make_optional_cstr(padding)?;
-        let challenge_password = make_optional_cstr(challenge_password)?;
-
         let obj = botan_init!(
             botan_x509_cert_builder_into_pkcs10_req,
             self.obj,
             key.handle(),
-            rng.handle(),
-            hash_fn
+            options.rng.handle(),
+            options
+                .hash_fn
                 .as_ref()
                 .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
-            padding
+            options
+                .padding
                 .as_ref()
                 .map_or(std::ptr::null(), |padding| padding.as_ptr()),
-            challenge_password
+            options
+                .challenge_password
                 .as_ref()
                 .map_or(std::ptr::null(), |ch_pw| ch_pw.as_ptr())
         )?;
 
         Ok(PKCS10Request { obj })
+    }
+}
+
+pub struct IntoCertOptions<'a> {
+    rng: &'a mut RandomNumberGenerator,
+    not_before: u64,
+    not_after: u64,
+    serial_number: Option<&'a MPI>,
+    hash_fn: Option<CString>,
+    padding: Option<CString>,
+}
+
+impl<'a> IntoCertOptions<'a> {
+    pub fn new(rng: &'a mut RandomNumberGenerator, not_before: u64, not_after: u64) -> Self {
+        IntoCertOptions {
+            rng,
+            not_before,
+            not_after,
+            serial_number: None,
+            hash_fn: None,
+            padding: None,
+        }
+    }
+
+    pub fn serial_number(mut self, sn: &'a MPI) -> Self {
+        self.serial_number = Some(sn);
+        self
+    }
+
+    pub fn hash_fn<H: crate::HashAlgorithmIdentifier>(mut self, hash_fn: H) -> Result<Self> {
+        self.hash_fn = Some(make_cstr(&hash_fn.botan_name())?);
+        Ok(self)
+    }
+
+    pub fn padding<P: crate::SignatureParamsIdentifier>(mut self, padding: P) -> Result<Self> {
+        self.padding = Some(make_cstr(&padding.botan_name())?);
+        Ok(self)
+    }
+}
+
+pub struct IntoRequestOptions<'a> {
+    rng: &'a mut RandomNumberGenerator,
+    hash_fn: Option<CString>,
+    padding: Option<CString>,
+    challenge_password: Option<CString>,
+}
+
+impl<'a> IntoRequestOptions<'a> {
+    pub fn new(rng: &'a mut RandomNumberGenerator) -> Self {
+        IntoRequestOptions {
+            rng,
+            hash_fn: None,
+            padding: None,
+            challenge_password: None,
+        }
+    }
+
+    pub fn hash_fn<H: crate::HashAlgorithmIdentifier>(mut self, hash_fn: H) -> Result<Self> {
+        self.hash_fn = Some(make_cstr(&hash_fn.botan_name())?);
+        Ok(self)
+    }
+
+    pub fn padding<P: crate::SignatureParamsIdentifier>(mut self, padding: P) -> Result<Self> {
+        self.padding = Some(make_cstr(&padding.botan_name())?);
+        Ok(self)
+    }
+
+    pub fn challenge_password(mut self, challenge_password: &str) -> Result<Self> {
+        self.challenge_password = Some(make_cstr(challenge_password)?);
+        Ok(self)
     }
 }
 
@@ -1069,16 +1125,9 @@ impl PKCS10Request {
         &self,
         ca_cert: &Certificate,
         ca_key: &Privkey,
-        rng: &mut RandomNumberGenerator,
-        not_before: u64,
-        not_after: u64,
-        serial_number: Option<&MPI>,
-        hash_fn: Option<&str>,
-        padding: Option<&str>,
+        options: IntoCertOptions,
     ) -> Result<Certificate> {
-        let hash_fn = make_optional_cstr(hash_fn)?;
-        let padding = make_optional_cstr(padding)?;
-        let serial_handle = serial_number.map(|sn| sn.handle());
+        let serial_handle = options.serial_number.map(|sn| sn.handle());
         let serial_ptr = serial_handle
             .as_ref()
             .map_or(std::ptr::null(), |handle| handle as *const _);
@@ -1088,14 +1137,16 @@ impl PKCS10Request {
             self.obj,
             ca_cert.handle(),
             ca_key.handle(),
-            rng.handle(),
-            not_before,
-            not_after,
+            options.rng.handle(),
+            options.not_before,
+            options.not_after,
             serial_ptr,
-            hash_fn
+            options
+                .hash_fn
                 .as_ref()
                 .map_or(std::ptr::null(), |hash_fn| hash_fn.as_ptr()),
-            padding
+            options
+                .padding
                 .as_ref()
                 .map_or(std::ptr::null(), |padding| padding.as_ptr())
         )?;

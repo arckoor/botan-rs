@@ -295,6 +295,24 @@ impl Privkey {
         Ok(Privkey::from_obj(obj))
     }
 
+    /// Load an SM2 private key
+    ///
+    /// This requires Botan 2.2 or later; with older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned
+    pub fn load_sm2<G: crate::KeyGenParamsIdentifier>(
+        scalar: &EcScalar,
+        curve_name: G,
+    ) -> Result<Privkey> {
+        let mpi = scalar.to_mpi()?;
+        let curve = curve_name.botan_name();
+        let obj = botan_init!(
+            botan_privkey_load_sm2,
+            mpi.handle(),
+            make_cstr(&curve)?.as_ptr()
+        )?;
+        Ok(Privkey::from_obj(obj))
+    }
+
     /// Load a DER-encoded PKCS#1 RSA private key
     pub fn load_rsa_pkcs1(pkcs1: &[u8]) -> Result<Privkey> {
         let obj = botan_init!(botan_privkey_load_rsa_pkcs1, pkcs1.as_ptr(), pkcs1.len())?;
@@ -901,6 +919,25 @@ impl Pubkey {
     /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned
     pub fn load_x448(key: &[u8]) -> Result<Pubkey> {
         let obj = botan_init!(botan_pubkey_load_x448, key.as_ptr())?;
+        Ok(Pubkey::from_handle(obj))
+    }
+
+    /// Load an SM2 public key
+    ///
+    /// This requires Botan 2.2 or later; with older versions an error of type
+    /// [`ErrorType::NotImplemented`](crate::ErrorType::NotImplemented) is returned
+    pub fn load_sm2<G: crate::KeyGenParamsIdentifier>(
+        public_x: &MPI,
+        public_y: &MPI,
+        curve_name: G,
+    ) -> Result<Pubkey> {
+        let curve = curve_name.botan_name();
+        let obj = botan_init!(
+            botan_pubkey_load_sm2,
+            public_x.handle(),
+            public_y.handle(),
+            make_cstr(&curve)?.as_ptr()
+        )?;
         Ok(Pubkey::from_handle(obj))
     }
 
